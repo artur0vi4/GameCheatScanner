@@ -32,12 +32,13 @@ from auto_detect import AutoDetector
 from process import (open_process, list_processes, list_processes_detailed,
                      MockProcess, IS_WINDOWS, is_admin)
 from i18n import tr, LANGS, LANG_CODES, current_lang, set_lang
+import icons
 
 _log = logging.getLogger("gamecheat")
 
 MAX_DISPLAY_ROWS = 5000
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 GITHUB_URL = "https://github.com/artur0vi4/GameCheatScanner"
 
 # ===========================================================================
@@ -88,7 +89,7 @@ def apply_theme(root: tk.Tk):
     s.map("Green.TButton", background=[("active", "#3be0b6"), ("disabled", C_BG_PANEL)])
     s.configure("Danger.TButton", background=C_RED, foreground="#2a0a10", font=F_BODY_B, padding=(10, 6))
     s.map("Danger.TButton", background=[("active", "#f47687")])
-    # Компактные иконки-кнопки в шапке (↻ обновить, ℹ о программе) —
+    # Компактные иконки-кнопки в шапке (обновить список, о программе) —
     # в едином стиле с остальными элементами, а не «голые» квадраты.
     s.configure("Icon.TButton", background=C_BG_ENTRY, foreground=C_FG_DIM, bordercolor=C_BORDER, font=F_BODY, padding=(8, 5), width=3)
     s.map("Icon.TButton", background=[("active", C_BORDER)], foreground=[("active", C_FG)], bordercolor=[("active", C_ACCENT)])
@@ -193,6 +194,9 @@ class App:
         self._last_value = None      # предыдущее введённое значение (для отношения при ранжировании)
         self._marquee = False        # режим «бегущего» индикатора во время отсева
 
+        # Иконки интерфейса (PNG base64, кэш на окно) + иконка окна в заголовке.
+        self.icons = icons.load(root)
+        root.iconphoto(False, self.icons["logo"])
         self._build_header()
         self._build_main()
         self._build_status_bar()
@@ -226,8 +230,7 @@ class App:
         # Левая часть: иконка-знак + название + подзаголовок.
         left = tk.Frame(hdr, bg=C_BG_PANEL)
         left.pack(side=tk.LEFT, padx=(14, 8), pady=12)
-        tk.Label(left, text="◆", bg=C_BG_PANEL, fg=C_ACCENT,
-                 font=("Segoe UI", 18)).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Label(left, image=self.icons["logo"], bg=C_BG_PANEL).pack(side=tk.LEFT, padx=(0, 8))
         tbox = tk.Frame(left, bg=C_BG_PANEL)
         tbox.pack(side=tk.LEFT)
         tk.Label(tbox, text="GameCheat Scanner", bg=C_BG_PANEL, fg=C_FG, font=F_TITLE).pack(anchor=tk.W)
@@ -244,14 +247,14 @@ class App:
         self.proc_combo.pack(side=tk.LEFT, padx=2)
         # Выбор игры в списке = авто-подключение (кнопка не нужна).
         self.proc_combo.bind("<<ComboboxSelected>>", lambda _e: self._attach_selected())
-        ttk.Button(right, text="↻", width=3, style="Icon.TButton",
+        ttk.Button(right, image=self.icons["refresh"], style="Icon.TButton",
                    command=self._refresh_processes).pack(side=tk.LEFT, padx=2)
         self.sys_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(right, text=tr("all_processes"), variable=self.sys_var,
                         command=self._repopulate_combo).pack(side=tk.LEFT, padx=(6, 0))
         # Визуальный разделитель между блоком процесса и сервисными кнопками.
         tk.Frame(right, bg=C_BORDER, width=1).pack(side=tk.LEFT, fill=tk.Y, padx=10)
-        ttk.Button(right, text="ℹ", width=3, style="Icon.TButton",
+        ttk.Button(right, image=self.icons["info"], style="Icon.TButton",
                    command=self._show_about).pack(side=tk.LEFT, padx=2)
         # Переключатель языка (живая перестройка UI через _rebuild).
         self.lang_var = tk.StringVar()
@@ -318,7 +321,7 @@ class App:
 
         head = tk.Frame(win, bg=C_BG_PANEL)
         head.pack(fill=tk.X, padx=18, pady=(18, 8))
-        tk.Label(head, text="◆", bg=C_BG_PANEL, fg=C_ACCENT, font=("Segoe UI", 22)).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Label(head, image=self.icons["logo"], bg=C_BG_PANEL).pack(side=tk.LEFT, padx=(0, 8))
         ht = tk.Frame(head, bg=C_BG_PANEL)
         ht.pack(side=tk.LEFT)
         tk.Label(ht, text=f"GameCheat Scanner  v{VERSION}", bg=C_BG_PANEL, fg=C_FG, font=F_TITLE).pack(anchor=tk.W)
@@ -371,11 +374,11 @@ class App:
         self.value_entry = ttk.Entry(bar, textvariable=self.value_var, width=16, font=F_BODY)
         self.value_entry.pack(side=tk.LEFT, padx=(0, 8))
         self.value_entry.bind("<Return>", lambda _e: self._smart_scan())
-        self.first_btn = ttk.Button(bar, text=tr("btn_search"), style="Accent.TButton", command=self._do_first_scan)
+        self.first_btn = ttk.Button(bar, text=tr("btn_search"), image=self.icons["search"], compound="left", style="Accent.TButton", command=self._do_first_scan)
         self.first_btn.pack(side=tk.LEFT, padx=2)
-        self.next_btn = ttk.Button(bar, text=tr("btn_narrow"), style="Accent.TButton", command=self._do_next_scan)
+        self.next_btn = ttk.Button(bar, text=tr("btn_narrow"), image=self.icons["funnel"], compound="left", style="Accent.TButton", command=self._do_next_scan)
         self.next_btn.pack(side=tk.LEFT, padx=2)
-        ttk.Button(bar, text=tr("btn_new_search"), command=self._new_scan).pack(side=tk.LEFT, padx=2)
+        ttk.Button(bar, text=tr("btn_new_search"), image=self.icons["plus"], compound="left", command=self._new_scan).pack(side=tk.LEFT, padx=2)
         self.scan_count_var = tk.StringVar(value=tr("matches_found", n=0))
         tk.Label(bar, textvariable=self.scan_count_var, bg=C_BG, fg=C_GREEN, font=F_BODY_B).pack(side=tk.RIGHT)
 
@@ -406,11 +409,11 @@ class App:
         self.write_var = tk.StringVar()
         self.write_entry = ttk.Entry(edit, textvariable=self.write_var, width=14, font=F_BODY)
         self.write_entry.pack(side=tk.LEFT, padx=(0, 6))
-        self.write_btn = ttk.Button(edit, text=tr("btn_write"), style="Accent.TButton", command=self._write_selected)
+        self.write_btn = ttk.Button(edit, text=tr("btn_write"), image=self.icons["pen"], compound="left", style="Accent.TButton", command=self._write_selected)
         self.write_btn.pack(side=tk.LEFT, padx=2)
-        self.freeze_btn = ttk.Button(edit, text=tr("btn_freeze"), style="Green.TButton", command=self._freeze_toggle_selected)
+        self.freeze_btn = ttk.Button(edit, text=tr("btn_freeze"), image=self.icons["snowflake"], compound="left", style="Green.TButton", command=self._freeze_toggle_selected)
         self.freeze_btn.pack(side=tk.LEFT, padx=2)
-        ttk.Button(edit, text=tr("btn_remove"), style="Danger.TButton", command=self._remove_selected).pack(side=tk.LEFT, padx=2)
+        ttk.Button(edit, text=tr("btn_remove"), image=self.icons["trash"], compound="left", style="Danger.TButton", command=self._remove_selected).pack(side=tk.LEFT, padx=2)
         self._set_edit_enabled(False)
 
         # Дерево — последним: expand заполняет всё оставшееся пространство.
@@ -468,9 +471,9 @@ class App:
         items = []
         for pid, name, path, cls in classified:
             if cls == "game":
-                mark = "🛠 " if _is_helper(name) else "🎮 "
+                mark = "♦ " if _is_helper(name) else "► "
             elif cls == "app":
-                mark = "▫ "
+                mark = "▪ "
             else:
                 mark = "· "
             items.append(f"{mark}{name}  (pid {pid})")
@@ -542,7 +545,7 @@ class App:
         self.detector = None
         self._mode = "exact"
         self._last_value = None
-        name = sel.rsplit("(pid", 1)[0].strip().lstrip("🎮▫·🛠 ").strip()
+        name = sel.rsplit("(pid", 1)[0].strip().lstrip("►▪·♦ ").strip()
         self._set_pill(tr("pill_connected", name=name), C_BLUE)
         self._set_status(tr("status_connected", pid=pid, name=name))
 
@@ -860,7 +863,7 @@ class App:
                     tags.append("frozen")
                 if i % 2 == 1:
                     tags.append("row2")
-                state = ("🔒 " if c.address in self.frozen else "") + tr(c.best_label or "res_unknown")
+                state = ("■ " if c.address in self.frozen else "") + tr(c.best_label or "res_unknown")
                 if c.confidence:
                     state += f" {c.confidence}%"
                 self.tree.insert("", tk.END, iid=str(i), tags=tuple(tags),
@@ -993,7 +996,7 @@ class App:
             try:
                 idx = int(iid)
                 c = self.detector.candidates[idx]
-                state = ("🔒 " if addr in self.frozen else "") + tr(c.best_label or "res_unknown")
+                state = ("■ " if addr in self.frozen else "") + tr(c.best_label or "res_unknown")
                 if c.confidence:
                     state += f" {c.confidence}%"
             except Exception:

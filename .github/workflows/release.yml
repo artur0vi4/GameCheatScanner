@@ -36,6 +36,7 @@ jobs:
             --onefile `
             --windowed `
             --uac-admin `
+            --icon app.ico `
             --name GameCheatScanner `
             --collect-all numpy `
             main.py
