@@ -38,7 +38,7 @@ _log = logging.getLogger("gamecheat")
 
 MAX_DISPLAY_ROWS = 5000
 
-VERSION = "1.1.2"
+VERSION = "1.1.3"
 GITHUB_URL = "https://github.com/artur0vi4/GameCheatScanner"
 
 # ===========================================================================
@@ -220,56 +220,71 @@ class App:
     # ------------------------------------------------------------------
 
     def _build_header(self):
-        hdr = tk.Frame(self.root, bg=C_BG_PANEL, height=68)
+        # Шапка — две строки в одной панели: бренд-бар сверху, процесс-тулбар
+        # снизу. Так 8 разнородных контролов не лепятся в один тесный ряд, а
+        # группируются по смыслу с честным выравниванием по вертикали (place).
+        hdr = tk.Frame(self.root, bg=C_BG_PANEL, height=104)
         hdr.pack(fill=tk.X)
         hdr.pack_propagate(False)
 
-        # Тонкая акцентная линия снизу — чёткая граница шапки от контента.
+        # Акцентная линия — самая нижняя граница панели шапки.
         tk.Frame(hdr, bg=C_ACCENT, height=2).pack(side=tk.BOTTOM, fill=tk.X)
+        # Нижний ряд: процесс-тулбар.
+        row2 = tk.Frame(hdr, bg=C_BG_PANEL, height=46)
+        row2.pack(side=tk.BOTTOM, fill=tk.X)
+        row2.pack_propagate(False)
+        # Тонкий разделитель между двумя рядами.
+        tk.Frame(hdr, bg=C_BORDER, height=1).pack(side=tk.BOTTOM, fill=tk.X)
+        # Верхний ряд: бренд-бар (заполняет остаток высоты).
+        row1 = tk.Frame(hdr, bg=C_BG_PANEL)
+        row1.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
-        # Левая часть: иконка-знак + название + подзаголовок.
-        left = tk.Frame(hdr, bg=C_BG_PANEL)
-        left.pack(side=tk.LEFT, padx=(14, 8), pady=12)
-        tk.Label(left, image=self.icons["logo"], bg=C_BG_PANEL).pack(side=tk.LEFT, padx=(0, 8))
-        tbox = tk.Frame(left, bg=C_BG_PANEL)
+        # --- Верхний ряд: слева лого + название, справа статус-бейдж + язык ---
+        brand = tk.Frame(row1, bg=C_BG_PANEL)
+        tk.Label(brand, image=self.icons["logo"], bg=C_BG_PANEL).pack(side=tk.LEFT, padx=(0, 10))
+        tbox = tk.Frame(brand, bg=C_BG_PANEL)
         tbox.pack(side=tk.LEFT)
         tk.Label(tbox, text="GameCheat Scanner", bg=C_BG_PANEL, fg=C_FG, font=F_TITLE).pack(anchor=tk.W)
-        tk.Label(tbox, text=tr("subtitle"),
-                 bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(anchor=tk.W)
+        tk.Label(tbox, text=tr("subtitle"), bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(anchor=tk.W)
+        brand.place(relx=0.0, rely=0.5, anchor=tk.W, x=16)
 
-        # Правая часть: выбор процесса + сервисные кнопки + пилюля статуса.
-        right = tk.Frame(hdr, bg=C_BG_PANEL)
-        right.pack(side=tk.RIGHT, padx=(0, 12), pady=12)
-        tk.Label(right, text=tr("process_label"), bg=C_BG_PANEL, fg=C_FG_DIM,
-                 font=F_SMALL).pack(side=tk.LEFT, padx=(0, 4))
-        self.proc_var = tk.StringVar()
-        self.proc_combo = ttk.Combobox(right, textvariable=self.proc_var, width=30, state="readonly")
-        self.proc_combo.pack(side=tk.LEFT, padx=2)
-        # Выбор игры в списке = авто-подключение (кнопка не нужна).
-        self.proc_combo.bind("<<ComboboxSelected>>", lambda _e: self._attach_selected())
-        ttk.Button(right, image=self.icons["refresh"], style="Icon.TButton",
-                   command=self._refresh_processes).pack(side=tk.LEFT, padx=2)
-        self.sys_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(right, text=tr("all_processes"), variable=self.sys_var,
-                        command=self._repopulate_combo).pack(side=tk.LEFT, padx=(6, 0))
-        # Визуальный разделитель между блоком процесса и сервисными кнопками.
-        tk.Frame(right, bg=C_BORDER, width=1).pack(side=tk.LEFT, fill=tk.Y, padx=10)
-        ttk.Button(right, image=self.icons["info"], style="Icon.TButton",
-                   command=self._show_about).pack(side=tk.LEFT, padx=2)
+        rside = tk.Frame(row1, bg=C_BG_PANEL)
+        # Статус-бейдж: вставная «пилюля» на тёмной панели (не голый текст).
+        self.status_pill = tk.Label(rside, text="● " + tr("pill_demo"),
+                                    bg=C_BG_ENTRY, fg=C_GREEN, font=F_SMALL, padx=10, pady=3)
+        self.status_pill.pack(side=tk.LEFT, padx=(0, 12))
         # Переключатель языка (живая перестройка UI через _rebuild).
         self.lang_var = tk.StringVar()
-        self.lang_combo = ttk.Combobox(right, textvariable=self.lang_var, width=9,
+        self.lang_combo = ttk.Combobox(rside, textvariable=self.lang_var, width=10,
                                        values=[n for _, n in LANGS], state="readonly")
         try:
             self.lang_combo.current(LANG_CODES.index(current_lang()))
         except Exception:
             self.lang_combo.current(0)
         self.lang_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_lang_change())
-        self.lang_combo.pack(side=tk.LEFT, padx=(6, 0))
-        # Статус-пилюля — чистая, в ряду справа (не «плавает» поверх шапки).
-        self.status_pill = tk.Label(right, text="● " + tr("pill_demo"),
-                                    bg=C_BG_PANEL, fg=C_GREEN, font=F_SMALL)
-        self.status_pill.pack(side=tk.LEFT, padx=(10, 0))
+        self.lang_combo.pack(side=tk.LEFT)
+        rside.place(relx=1.0, rely=0.5, anchor=tk.E, x=-16)
+
+        # --- Нижний ряд: выбор процесса слева, «о программе» справа ---
+        grp = tk.Frame(row2, bg=C_BG_PANEL)
+        tk.Label(grp, text=tr("process_label"), bg=C_BG_PANEL, fg=C_FG_DIM,
+                 font=F_SMALL).pack(side=tk.LEFT, padx=(0, 6))
+        self.proc_var = tk.StringVar()
+        self.proc_combo = ttk.Combobox(grp, textvariable=self.proc_var, width=30, state="readonly")
+        self.proc_combo.pack(side=tk.LEFT, padx=(0, 4))
+        # Выбор игры в списке = авто-подключение (кнопка не нужна).
+        self.proc_combo.bind("<<ComboboxSelected>>", lambda _e: self._attach_selected())
+        ttk.Button(grp, image=self.icons["refresh"], style="Icon.TButton",
+                   command=self._refresh_processes).pack(side=tk.LEFT, padx=(0, 10))
+        self.sys_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(grp, text=tr("all_processes"), variable=self.sys_var,
+                        command=self._repopulate_combo).pack(side=tk.LEFT)
+        grp.place(relx=0.0, rely=0.5, anchor=tk.W, x=16)
+
+        ginfo = tk.Frame(row2, bg=C_BG_PANEL)
+        ttk.Button(ginfo, image=self.icons["info"], style="Icon.TButton",
+                   command=self._show_about).pack(side=tk.LEFT)
+        ginfo.place(relx=1.0, rely=0.5, anchor=tk.E, x=-16)
 
     def _set_pill(self, text, color):
         self.status_pill.config(text=f"● {text}", fg=color)
