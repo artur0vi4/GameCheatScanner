@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+
+# PyInstaller / сборка
+build/
+dist/
+*.spec
+
+# Логи и временные файлы
+*.log
+gamecheat.log
+
+# Скриншоты (устаревшие; добавьте актуальные с Windows при желании)
+screenshots/
+
+# ОС / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
