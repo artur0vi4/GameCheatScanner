@@ -37,7 +37,7 @@ _log = logging.getLogger("gamecheat")
 
 MAX_DISPLAY_ROWS = 5000
 
-VERSION = "1.0"
+VERSION = "1.1.1"
 GITHUB_URL = "https://github.com/artur0vi4/GameCheatScanner"
 
 # ===========================================================================
@@ -88,6 +88,10 @@ def apply_theme(root: tk.Tk):
     s.map("Green.TButton", background=[("active", "#3be0b6"), ("disabled", C_BG_PANEL)])
     s.configure("Danger.TButton", background=C_RED, foreground="#2a0a10", font=F_BODY_B, padding=(10, 6))
     s.map("Danger.TButton", background=[("active", "#f47687")])
+    # Компактные иконки-кнопки в шапке (↻ обновить, ℹ о программе) —
+    # в едином стиле с остальными элементами, а не «голые» квадраты.
+    s.configure("Icon.TButton", background=C_BG_ENTRY, foreground=C_FG_DIM, bordercolor=C_BORDER, font=F_BODY, padding=(8, 5), width=3)
+    s.map("Icon.TButton", background=[("active", C_BORDER)], foreground=[("active", C_FG)], bordercolor=[("active", C_ACCENT)])
     s.configure("TEntry", fieldbackground=C_BG_ENTRY, foreground=C_FG, bordercolor=C_BORDER, insertcolor=C_FG, padding=5)
     s.map("TEntry", bordercolor=[("focus", C_ACCENT)])
     s.configure("TCombobox", fieldbackground=C_BG_ENTRY, foreground=C_FG, background=C_BG_ENTRY, bordercolor=C_BORDER, arrowcolor=C_FG, padding=5)
@@ -212,30 +216,43 @@ class App:
     # ------------------------------------------------------------------
 
     def _build_header(self):
-        hdr = tk.Frame(self.root, bg=C_BG_PANEL, height=64)
+        hdr = tk.Frame(self.root, bg=C_BG_PANEL, height=68)
         hdr.pack(fill=tk.X)
         hdr.pack_propagate(False)
 
-        tk.Label(hdr, text="◆", bg=C_BG_PANEL, fg=C_ACCENT, font=("Segoe UI", 18)).pack(side=tk.LEFT, padx=(14, 6))
-        tbox = tk.Frame(hdr, bg=C_BG_PANEL)
+        # Тонкая акцентная линия снизу — чёткая граница шапки от контента.
+        tk.Frame(hdr, bg=C_ACCENT, height=2).pack(side=tk.BOTTOM, fill=tk.X)
+
+        # Левая часть: иконка-знак + название + подзаголовок.
+        left = tk.Frame(hdr, bg=C_BG_PANEL)
+        left.pack(side=tk.LEFT, padx=(14, 8), pady=12)
+        tk.Label(left, text="◆", bg=C_BG_PANEL, fg=C_ACCENT,
+                 font=("Segoe UI", 18)).pack(side=tk.LEFT, padx=(0, 8))
+        tbox = tk.Frame(left, bg=C_BG_PANEL)
         tbox.pack(side=tk.LEFT)
         tk.Label(tbox, text="GameCheat Scanner", bg=C_BG_PANEL, fg=C_FG, font=F_TITLE).pack(anchor=tk.W)
         tk.Label(tbox, text=tr("subtitle"),
                  bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(anchor=tk.W)
 
+        # Правая часть: выбор процесса + сервисные кнопки + пилюля статуса.
         right = tk.Frame(hdr, bg=C_BG_PANEL)
-        right.pack(side=tk.RIGHT, padx=(0, 12))
-        tk.Label(right, text=tr("process_label"), bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(side=tk.LEFT, padx=(0, 4))
+        right.pack(side=tk.RIGHT, padx=(0, 12), pady=12)
+        tk.Label(right, text=tr("process_label"), bg=C_BG_PANEL, fg=C_FG_DIM,
+                 font=F_SMALL).pack(side=tk.LEFT, padx=(0, 4))
         self.proc_var = tk.StringVar()
-        self.proc_combo = ttk.Combobox(right, textvariable=self.proc_var, width=34, state="readonly")
+        self.proc_combo = ttk.Combobox(right, textvariable=self.proc_var, width=30, state="readonly")
         self.proc_combo.pack(side=tk.LEFT, padx=2)
         # Выбор игры в списке = авто-подключение (кнопка не нужна).
         self.proc_combo.bind("<<ComboboxSelected>>", lambda _e: self._attach_selected())
-        ttk.Button(right, text="↻", width=3, command=self._refresh_processes).pack(side=tk.LEFT, padx=2)
+        ttk.Button(right, text="↻", width=3, style="Icon.TButton",
+                   command=self._refresh_processes).pack(side=tk.LEFT, padx=2)
         self.sys_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(right, text=tr("all_processes"), variable=self.sys_var,
                         command=self._repopulate_combo).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(right, text="ℹ", width=3, command=self._show_about).pack(side=tk.LEFT, padx=(6, 0))
+        # Визуальный разделитель между блоком процесса и сервисными кнопками.
+        tk.Frame(right, bg=C_BORDER, width=1).pack(side=tk.LEFT, fill=tk.Y, padx=10)
+        ttk.Button(right, text="ℹ", width=3, style="Icon.TButton",
+                   command=self._show_about).pack(side=tk.LEFT, padx=2)
         # Переключатель языка (живая перестройка UI через _rebuild).
         self.lang_var = tk.StringVar()
         self.lang_combo = ttk.Combobox(right, textvariable=self.lang_var, width=9,
@@ -246,9 +263,10 @@ class App:
             self.lang_combo.current(0)
         self.lang_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_lang_change())
         self.lang_combo.pack(side=tk.LEFT, padx=(6, 0))
-
-        self.status_pill = tk.Label(hdr, text="● " + tr("pill_demo"), bg=C_BG_PANEL, fg=C_GREEN, font=F_SMALL)
-        self.status_pill.place(relx=1.0, x=-12, rely=1.0, y=-6, anchor="se")
+        # Статус-пилюля — чистая, в ряду справа (не «плавает» поверх шапки).
+        self.status_pill = tk.Label(right, text="● " + tr("pill_demo"),
+                                    bg=C_BG_PANEL, fg=C_GREEN, font=F_SMALL)
+        self.status_pill.pack(side=tk.LEFT, padx=(10, 0))
 
     def _set_pill(self, text, color):
         self.status_pill.config(text=f"● {text}", fg=color)
@@ -368,24 +386,19 @@ class App:
         self.progress = ttk.Progressbar(self.root, mode="determinate")
         self.progress.pack(fill=tk.X, padx=10, pady=(4, 4))
 
-        tree_frame = tk.Frame(self.root, bg=C_BG)
-        tree_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 4))
-        cols = ("addr", "type", "value", "state")
-        self.tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=20)
-        for c, w, a, t in [("addr", 170, tk.W, tr("col_addr")), ("type", 90, tk.W, tr("col_type")),
-                          ("value", 120, tk.E, tr("col_value")), ("state", 170, tk.W, tr("col_state"))]:
-            self.tree.heading(c, text=t)
-            self.tree.column(c, width=w, anchor=a)
-        self.tree.tag_configure("row2", background=C_BG_ROW2)
-        self.tree.tag_configure("frozen", foreground=C_GREEN)
-        vsb = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=vsb.set)
-        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        vsb.pack(side=tk.RIGHT, fill=tk.Y)
-        self.tree.bind("<<TreeviewSelect>>", lambda _e: self._on_select())
+        # Нижние панели пакуем ПЕРВЫМИ (side=BOTTOM) — строка состояния и панель
+        # редактирования всегда видны, даже когда окно не развёрнуто полностью.
+        # Дерево результатов (expand) пакуем последним: оно заполняет середину и
+        # первым ужмётся, если вертикального места не хватает.
+        status = tk.Frame(self.root, bg=C_BG_PANEL, height=28)
+        status.pack(fill=tk.X, side=tk.BOTTOM)
+        status.pack_propagate(False)
+        self.status_var = tk.StringVar(value=tr("status_demo_ready"))
+        tk.Label(status, textvariable=self.status_var, bg=C_BG_PANEL, fg=C_FG_DIM,
+                 font=F_SMALL).pack(side=tk.LEFT, padx=10, pady=4)
 
         edit = tk.Frame(self.root, bg=C_BG_PANEL)
-        edit.pack(fill=tk.X, padx=10, pady=(0, 6))
+        edit.pack(fill=tk.X, side=tk.BOTTOM, padx=10, pady=(0, 6))
         tk.Label(edit, text=tr("selected_addr"), bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(side=tk.LEFT, padx=(8, 4))
         self.sel_addr_var = tk.StringVar(value="—")
         tk.Label(edit, textvariable=self.sel_addr_var, bg=C_BG_PANEL, fg=C_FG, font=F_BODY_B).pack(side=tk.LEFT, padx=(0, 10))
@@ -400,12 +413,27 @@ class App:
         ttk.Button(edit, text=tr("btn_remove"), style="Danger.TButton", command=self._remove_selected).pack(side=tk.LEFT, padx=2)
         self._set_edit_enabled(False)
 
+        # Дерево — последним: expand заполняет всё оставшееся пространство.
+        tree_frame = tk.Frame(self.root, bg=C_BG)
+        tree_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 4))
+        cols = ("addr", "type", "value", "state")
+        self.tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=16)
+        for c, w, a, t in [("addr", 170, tk.W, tr("col_addr")), ("type", 90, tk.W, tr("col_type")),
+                          ("value", 120, tk.E, tr("col_value")), ("state", 170, tk.W, tr("col_state"))]:
+            self.tree.heading(c, text=t)
+            self.tree.column(c, width=w, anchor=a)
+        self.tree.tag_configure("row2", background=C_BG_ROW2)
+        self.tree.tag_configure("frozen", foreground=C_GREEN)
+        vsb = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=vsb.set)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree.bind("<<TreeviewSelect>>", lambda _e: self._on_select())
+
     def _build_status_bar(self):
-        bar = tk.Frame(self.root, bg=C_BG_PANEL, height=28)
-        bar.pack(fill=tk.X, side=tk.BOTTOM)
-        bar.pack_propagate(False)
-        self.status_var = tk.StringVar(value=tr("status_demo_ready"))
-        tk.Label(bar, textvariable=self.status_var, bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(side=tk.LEFT, padx=10, pady=4)
+        # Устаревший метод: строка состояния теперь строится в _build_main
+        # (pack side=BOTTOM до дерева) — оставлен как no-op для совместимости.
+        pass
 
     # ------------------------------------------------------------------
     # Процессы: фильтр игр + авто-подключение
