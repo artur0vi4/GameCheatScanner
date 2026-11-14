@@ -63,28 +63,28 @@ class ResourceSignature:
 
 SIGNATURES: dict[str, ResourceSignature] = {
     "health": ResourceSignature(
-        "health", "Здоровье", (1, 9999), (1, 500),
+        "health", "res_health", (1, 9999), (1, 500),
         ("int32", "float32", "uint32"),
         neighbor_offset=4, neighbor_relation="ge"),
     "mana": ResourceSignature(
-        "mana", "Мана / энергия", (0, 9999), (1, 200),
+        "mana", "res_mana", (0, 9999), (1, 200),
         ("int32", "float32", "uint32"),
         neighbor_offset=4, neighbor_relation="ge"),
     "stamina": ResourceSignature(
-        "stamina", "Выносливость", (0, 1000), (1, 100),
+        "stamina", "res_stamina", (0, 1000), (1, 100),
         ("int32", "float32", "uint32")),
     "ammo": ResourceSignature(
-        "ammo", "Патроны", (0, 9999), (1, 200),
+        "ammo", "res_ammo", (0, 9999), (1, 200),
         ("int32", "uint32"),
         neighbor_offset=4, neighbor_relation="ge"),  # max_ammo рядом
     "gold": ResourceSignature(
-        "gold", "Золото / деньги", (0, 2_000_000_000), (1, 10_000_000),
+        "gold", "res_gold", (0, 2_000_000_000), (1, 10_000_000),
         ("int32", "uint32", "int64", "uint64")),
     "level": ResourceSignature(
-        "level", "Уровень", (1, 1000), (1, 1),
+        "level", "res_level", (1, 1000), (1, 1),
         ("int32", "uint32")),
     "xp": ResourceSignature(
-        "xp", "Опыт (XP)", (0, 2_000_000_000), (1, 1_000_000),
+        "xp", "res_xp", (0, 2_000_000_000), (1, 1_000_000),
         ("int32", "uint32", "int64", "uint64")),
 }
 
@@ -121,7 +121,7 @@ class Candidate:
     baseline: float | int      # значение на baseline
     current: float | int       # последнее значение
     delta: float               # величина изменения (положительная = в сторону действия)
-    best_label: str = "?"      # наиболее вероятный ресурс
+    best_label: str = "res_unknown"      # наиболее вероятный ресурс (ключ i18n)
     confidence: int = 0        # 0..100
     scores: dict = field(default_factory=dict)  # label -> score
 
@@ -486,7 +486,7 @@ class AutoDetector:
             best_score = scores[best_key]
             c.scores = scores
             # confidence = доля от теоретического максимума (~110, с kind-бонусом).
-            c.best_label = SIGNATURES[best_key].label if best_score > 0 else "?"
+            c.best_label = SIGNATURES[best_key].label if best_score > 0 else "res_unknown"
             c.confidence = min(100, int(best_score * 100 / 110))
         # Сортируем: выше confidence — первыми.
         self.candidates.sort(key=lambda c: (-c.confidence, c.address))

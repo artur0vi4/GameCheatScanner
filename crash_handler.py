@@ -22,6 +22,7 @@ import traceback
 import threading
 import platform
 from pathlib import Path
+from i18n import tr
 
 # Лог лежит рядом с программой (там же, где main.py / собранный .exe).
 if getattr(sys, "frozen", False):
@@ -108,7 +109,7 @@ def show_crash_dialog(exc, tb_str: str):
     from tkinter import ttk, scrolledtext
 
     root = tk.Tk()
-    root.title("GameCheat Scanner — ошибка")
+    root.title(tr("crash_title"))
     root.geometry("760x460")
     root.minsize(560, 320)
     BG, PANEL, FG, DIM, ACCENT, GREEN, RED = (
@@ -119,12 +120,12 @@ def show_crash_dialog(exc, tb_str: str):
     head = tk.Frame(root, bg=PANEL, height=54)
     head.pack(fill=tk.X)
     head.pack_propagate(False)
-    tk.Label(head, text="⚠  Программа завершилась с ошибкой", bg=PANEL, fg=RED,
+    tk.Label(head, text=tr("crash_header"), bg=PANEL, fg=RED,
              font=("Segoe UI", 13, "bold")).pack(padx=14, pady=14, anchor=tk.W)
 
     body = tk.Frame(root, bg=BG)
     body.pack(fill=tk.BOTH, expand=True, padx=12, pady=(8, 4))
-    tk.Label(body, text="Подробный лог сохранён в файл:", bg=BG, fg=DIM,
+    tk.Label(body, text=tr("crash_log_saved"), bg=BG, fg=DIM,
              font=("Segoe UI", 9)).pack(anchor=tk.W)
     path_lbl = tk.Label(body, text=str(LOG_PATH), bg=BG, fg=GREEN,
                         font=("Consolas", 9))
@@ -143,9 +144,9 @@ def show_crash_dialog(exc, tb_str: str):
     def copy_all():
         root.clipboard_clear()
         root.clipboard_append(tb_str + "\n\n-- лог: " + str(LOG_PATH))
-        btn_copy.config(text="✓ Скопировано в буфер")
+        btn_copy.config(text=tr("crash_copied"))
 
-    btn_copy = ttk.Button(btns, text="Скопировать лог", command=copy_all)
+    btn_copy = ttk.Button(btns, text=tr("crash_copy_btn"), command=copy_all)
     btn_copy.pack(side=tk.LEFT)
 
     def open_folder():
@@ -161,8 +162,8 @@ def show_crash_dialog(exc, tb_str: str):
         except Exception as e:
             logger.error("Не удалось открыть лог: %s", e)
 
-    ttk.Button(btns, text="Открыть лог-файл", command=open_folder
+    ttk.Button(btns, text=tr("crash_open_btn"), command=open_folder
                ).pack(side=tk.LEFT, padx=6)
-    ttk.Button(btns, text="Закрыть", command=root.destroy).pack(side=tk.RIGHT)
+    ttk.Button(btns, text=tr("crash_close"), command=root.destroy).pack(side=tk.RIGHT)
 
     root.mainloop()

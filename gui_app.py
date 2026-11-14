@@ -31,6 +31,7 @@ from scanner import Scanner, MODE_EXACT, ScanProgress
 from auto_detect import AutoDetector
 from process import (open_process, list_processes, list_processes_detailed,
                      MockProcess, IS_WINDOWS, is_admin)
+from i18n import tr, LANGS, LANG_CODES, current_lang, set_lang
 
 _log = logging.getLogger("gamecheat")
 
@@ -198,7 +199,7 @@ class App:
                 self._check_admin()
             except Exception as e:
                 _log.exception("Сбой при получении списка процессов: %s", e)
-                self._set_status("Не удалось получить список процессов. Нажмите ↻.")
+                self._set_status(tr("status_no_proc_list"))
         else:
             # На не-Windows чужой памяти нет — демо-режим (для предпросмотра).
             self._attach_demo()
@@ -219,12 +220,12 @@ class App:
         tbox = tk.Frame(hdr, bg=C_BG_PANEL)
         tbox.pack(side=tk.LEFT)
         tk.Label(tbox, text="GameCheat Scanner", bg=C_BG_PANEL, fg=C_FG, font=F_TITLE).pack(anchor=tk.W)
-        tk.Label(tbox, text="поиск значения по всем типам + авто-отсев + запись",
+        tk.Label(tbox, text=tr("subtitle"),
                  bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(anchor=tk.W)
 
         right = tk.Frame(hdr, bg=C_BG_PANEL)
         right.pack(side=tk.RIGHT, padx=(0, 12))
-        tk.Label(right, text="Процесс:", bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(side=tk.LEFT, padx=(0, 4))
+        tk.Label(right, text=tr("process_label"), bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(side=tk.LEFT, padx=(0, 4))
         self.proc_var = tk.StringVar()
         self.proc_combo = ttk.Combobox(right, textvariable=self.proc_var, width=34, state="readonly")
         self.proc_combo.pack(side=tk.LEFT, padx=2)
@@ -232,19 +233,66 @@ class App:
         self.proc_combo.bind("<<ComboboxSelected>>", lambda _e: self._attach_selected())
         ttk.Button(right, text="↻", width=3, command=self._refresh_processes).pack(side=tk.LEFT, padx=2)
         self.sys_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(right, text="все процессы", variable=self.sys_var,
+        ttk.Checkbutton(right, text=tr("all_processes"), variable=self.sys_var,
                         command=self._repopulate_combo).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(right, text="ℹ", width=3, command=self._show_about).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(right, text="ℹ", width=3, command=self._show_about).pack(side=tk.LEFT, padx=(6, 0))
+        # Переключатель языка (живая перестройка UI через _rebuild).
+        self.lang_var = tk.StringVar()
+        self.lang_combo = ttk.Combobox(right, textvariable=self.lang_var, width=9,
+                                       values=[n for _, n in LANGS], state="readonly")
+        try:
+            self.lang_combo.current(LANG_CODES.index(current_lang()))
+        except Exception:
+            self.lang_combo.current(0)
+        self.lang_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_lang_change())
+        self.lang_combo.pack(side=tk.LEFT, padx=(6, 0))
 
-        self.status_pill = tk.Label(hdr, text="● Учебный режим", bg=C_BG_PANEL, fg=C_GREEN, font=F_SMALL)
+        self.status_pill = tk.Label(hdr, text="● " + tr("pill_demo"), bg=C_BG_PANEL, fg=C_GREEN, font=F_SMALL)
         self.status_pill.place(relx=1.0, x=-12, rely=1.0, y=-6, anchor="se")
 
     def _set_pill(self, text, color):
         self.status_pill.config(text=f"● {text}", fg=color)
 
+    def _on_lang_change(self):
+        idx = self.lang_combo.current()
+        if idx < 0:
+            return
+        code = LANG_CODES[idx]
+        if code == current_lang():
+            return
+        set_lang(code)
+        self._rebuild()
+
+    def _rebuild(self):
+        """Живая перестройка UI при смене языка. Состояние (процесс,
+        снимок, кандидаты, замороженные адреса) сохраняется на self."""
+        last_status = self.status_var.get() if hasattr(self, "status_var") else ""
+        pill_text = self.status_pill.cget("text") if hasattr(self, "status_pill") else ""
+        pill_fg = self.status_pill.cget("fg") if hasattr(self, "status_pill") else C_GREEN
+        count = self.scan_count_var.get() if hasattr(self, "scan_count_var") else ""
+        for w in list(self.root.winfo_children()):
+            w.destroy()
+        self._build_header()
+        self._build_main()
+        self._build_status_bar()
+        # Список процессов (без повторного авто-подключения — .current() не
+        # генерирует <<ComboboxSelected>>, см. _auto_connect_top_game).
+        if getattr(self, "_procs_raw", None):
+            self._repopulate_combo()
+        # Восстановить состояние поверх.
+        if pill_text:
+            self.status_pill.config(text=pill_text, fg=pill_fg)
+        if last_status:
+            self.status_var.set(last_status)
+        if count:
+            self.scan_count_var.set(count)
+        if (self.detector and self.detector.candidates) or (self.scanner and self.scanner.matches):
+            self._render_results()
+        self._set_edit_enabled(False)
+
     def _show_about(self):
         win = tk.Toplevel(self.root)
-        win.title("О программе")
+        win.title(tr("about_title"))
         win.configure(bg=C_BG_PANEL)
         win.resizable(False, False)
         win.transient(self.root)
@@ -256,26 +304,18 @@ class App:
         ht = tk.Frame(head, bg=C_BG_PANEL)
         ht.pack(side=tk.LEFT)
         tk.Label(ht, text=f"GameCheat Scanner  v{VERSION}", bg=C_BG_PANEL, fg=C_FG, font=F_TITLE).pack(anchor=tk.W)
-        tk.Label(ht, text="поиск значения по всем типам + авто-отсев + запись",
+        tk.Label(ht, text=tr("subtitle"),
                  bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(anchor=tk.W)
 
         body = tk.Frame(win, bg=C_BG_PANEL)
         body.pack(fill=tk.X, padx=18, pady=(0, 8))
         lines = [
-            ("Что это", "Аналог ArtMoney / Cheat Engine для одиночных игр: многотиповый "
-                        "поиск значения, авто-отсев изменившихся адресов, запись и заморозка."),
-            ("Методика", "Алгоритм авто-отсева основан на приёмах Cheat Engine: "
-                         "снимок памяти → направленный отсев (упало/выросло) → «не изменилось» "
-                         "(отсев тикающего шума), выравнивание по типу и фильтр мусорных float."),
-            ("Благодарности", "Спасибо за тестирование на реальных играх и обратную связь — "
-                              "они довели авто-отсев до рабочего состояния. "
-                              "Cheat Engine — за классическую методику changed/unchanged scan. "
-                              "numpy — за векторизованный дифф памяти."),
-            ("Лицензия", "MIT — свободно для личного и образовательного использования. "
-                         "Только в одиночных играх; без гарантий."),
-            ("Исходники", GITHUB_URL),
-            ("Поддержать", "Проект бесплатный. Сказать спасибо: крипта (USDT TON / BTC / ETH) "
-                           "и Telegram @jamurai — реквизиты в docs/RU/Funding.md."),
+            (tr("about_what"), tr("about_what_body")),
+            (tr("about_method"), tr("about_method_body")),
+            (tr("about_thanks"), tr("about_thanks_body")),
+            (tr("about_license"), tr("about_license_body")),
+            (tr("about_source"), GITHUB_URL),
+            (tr("about_support"), tr("about_support_body")),
         ]
         for title, text in lines:
             row = tk.Frame(body, bg=C_BG_PANEL)
@@ -285,7 +325,7 @@ class App:
             tk.Label(row, text=text, bg=C_BG_PANEL, fg=C_FG, font=F_BODY,
                      justify=tk.LEFT, wraplength=420).pack(side=tk.LEFT, fill=tk.X)
 
-        ttk.Button(win, text="Закрыть", command=win.destroy).pack(pady=(4, 14))
+        ttk.Button(win, text=tr("about_close"), command=win.destroy).pack(pady=(4, 14))
         win.update_idletasks()
         w, h = win.winfo_reqwidth(), win.winfo_reqheight()
         sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
@@ -299,8 +339,7 @@ class App:
         strip = tk.Frame(self.root, bg=C_BG_PANEL, height=34)
         strip.pack(fill=tk.X)
         strip.pack_propagate(False)
-        steps = ["Введите значение", "Поиск", "Измените в игре",
-                 "Отсев (новое значение)", "Записать / Заморозить"]
+        steps = [tr("step1"), tr("step2"), tr("step3"), tr("step4"), tr("step5")]
         for i, step in enumerate(steps, 1):
             tk.Label(strip, text=str(i), bg=C_ACCENT, fg="#ffffff", font=F_BODY_B, width=2, padx=4).pack(side=tk.LEFT, padx=(10, 4), pady=6)
             tk.Label(strip, text=step, bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(side=tk.LEFT, padx=(0, 6), pady=6)
@@ -309,22 +348,21 @@ class App:
 
         bar = tk.Frame(self.root, bg=C_BG)
         bar.pack(fill=tk.X, padx=10, pady=(8, 4))
-        tk.Label(bar, text="Значение:", bg=C_BG, fg=C_FG, font=F_BODY_B).pack(side=tk.LEFT, padx=(0, 6))
+        tk.Label(bar, text=tr("value_label"), bg=C_BG, fg=C_FG, font=F_BODY_B).pack(side=tk.LEFT, padx=(0, 6))
         self.value_var = tk.StringVar()
         self.value_entry = ttk.Entry(bar, textvariable=self.value_var, width=16, font=F_BODY)
         self.value_entry.pack(side=tk.LEFT, padx=(0, 8))
         self.value_entry.bind("<Return>", lambda _e: self._smart_scan())
-        self.first_btn = ttk.Button(bar, text="▶  Поиск", style="Accent.TButton", command=self._do_first_scan)
+        self.first_btn = ttk.Button(bar, text=tr("btn_search"), style="Accent.TButton", command=self._do_first_scan)
         self.first_btn.pack(side=tk.LEFT, padx=2)
-        self.next_btn = ttk.Button(bar, text="Отсев", style="Accent.TButton", command=self._do_next_scan)
+        self.next_btn = ttk.Button(bar, text=tr("btn_narrow"), style="Accent.TButton", command=self._do_next_scan)
         self.next_btn.pack(side=tk.LEFT, padx=2)
-        ttk.Button(bar, text="✕  Новый поиск", command=self._new_scan).pack(side=tk.LEFT, padx=2)
-        self.scan_count_var = tk.StringVar(value="Совпадений: 0")
+        ttk.Button(bar, text=tr("btn_new_search"), command=self._new_scan).pack(side=tk.LEFT, padx=2)
+        self.scan_count_var = tk.StringVar(value=tr("matches_found", n=0))
         tk.Label(bar, textvariable=self.scan_count_var, bg=C_BG, fg=C_GREEN, font=F_BODY_B).pack(side=tk.RIGHT)
 
         tk.Label(self.root,
-                 text="«Поиск» — по текущему значению (все типы сразу).  «Отсев» — после смены в игре введите новое значение; "
-                      "если точных нет — программа сама покажет изменившиеся адреса (авто).",
+                 text=tr("hint_main"),
                  bg=C_BG, fg=C_FG_DIM, font=F_SMALL).pack(anchor=tk.W, padx=12)
 
         self.progress = ttk.Progressbar(self.root, mode="determinate")
@@ -334,8 +372,8 @@ class App:
         tree_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 4))
         cols = ("addr", "type", "value", "state")
         self.tree = ttk.Treeview(tree_frame, columns=cols, show="headings", height=20)
-        for c, w, a, t in [("addr", 170, tk.W, "Адрес"), ("type", 90, tk.W, "Тип"),
-                          ("value", 120, tk.E, "Значение"), ("state", 170, tk.W, "Состояние / ресурс")]:
+        for c, w, a, t in [("addr", 170, tk.W, tr("col_addr")), ("type", 90, tk.W, tr("col_type")),
+                          ("value", 120, tk.E, tr("col_value")), ("state", 170, tk.W, tr("col_state"))]:
             self.tree.heading(c, text=t)
             self.tree.column(c, width=w, anchor=a)
         self.tree.tag_configure("row2", background=C_BG_ROW2)
@@ -348,25 +386,25 @@ class App:
 
         edit = tk.Frame(self.root, bg=C_BG_PANEL)
         edit.pack(fill=tk.X, padx=10, pady=(0, 6))
-        tk.Label(edit, text="Выбранный адрес:", bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(side=tk.LEFT, padx=(8, 4))
+        tk.Label(edit, text=tr("selected_addr"), bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(side=tk.LEFT, padx=(8, 4))
         self.sel_addr_var = tk.StringVar(value="—")
         tk.Label(edit, textvariable=self.sel_addr_var, bg=C_BG_PANEL, fg=C_FG, font=F_BODY_B).pack(side=tk.LEFT, padx=(0, 10))
-        tk.Label(edit, text="Новое значение:", bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(side=tk.LEFT, padx=(8, 4))
+        tk.Label(edit, text=tr("new_value"), bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(side=tk.LEFT, padx=(8, 4))
         self.write_var = tk.StringVar()
         self.write_entry = ttk.Entry(edit, textvariable=self.write_var, width=14, font=F_BODY)
         self.write_entry.pack(side=tk.LEFT, padx=(0, 6))
-        self.write_btn = ttk.Button(edit, text="Записать", style="Accent.TButton", command=self._write_selected)
+        self.write_btn = ttk.Button(edit, text=tr("btn_write"), style="Accent.TButton", command=self._write_selected)
         self.write_btn.pack(side=tk.LEFT, padx=2)
-        self.freeze_btn = ttk.Button(edit, text="Заморозить", style="Green.TButton", command=self._freeze_toggle_selected)
+        self.freeze_btn = ttk.Button(edit, text=tr("btn_freeze"), style="Green.TButton", command=self._freeze_toggle_selected)
         self.freeze_btn.pack(side=tk.LEFT, padx=2)
-        ttk.Button(edit, text="✕ Убрать из списка", style="Danger.TButton", command=self._remove_selected).pack(side=tk.LEFT, padx=2)
+        ttk.Button(edit, text=tr("btn_remove"), style="Danger.TButton", command=self._remove_selected).pack(side=tk.LEFT, padx=2)
         self._set_edit_enabled(False)
 
     def _build_status_bar(self):
         bar = tk.Frame(self.root, bg=C_BG_PANEL, height=28)
         bar.pack(fill=tk.X, side=tk.BOTTOM)
         bar.pack_propagate(False)
-        self.status_var = tk.StringVar(value="Учебный режим готов. Введите значение и нажмите «Поиск».")
+        self.status_var = tk.StringVar(value=tr("status_demo_ready"))
         tk.Label(bar, textvariable=self.status_var, bg=C_BG_PANEL, fg=C_FG_DIM, font=F_SMALL).pack(side=tk.LEFT, padx=10, pady=4)
 
     # ------------------------------------------------------------------
@@ -379,7 +417,7 @@ class App:
         except Exception as e:
             _log.exception("list_processes_detailed() ошибся: %s", e)
             self.proc_combo["values"] = []
-            self._set_status(f"Ошибка списка процессов: {e}. Подробности — в gamecheat.log.")
+            self._set_status(tr("status_proc_list_err", e=e))
             return
         self._procs_raw = procs
         self._repopulate_combo()
@@ -412,13 +450,13 @@ class App:
         n_games = sum(1 for p in classified if p[3] == "game" and not _is_helper(p[1]))
         n_helpers = sum(1 for p in classified if p[3] == "game" and _is_helper(p[1]))
         n_apps = sum(1 for p in classified if p[3] == "app")
-        admin_txt = "Админ:ДА" if is_admin() else "Админ:НЕТ"
+        admin_txt = tr("admin_yes") if is_admin() else tr("admin_no")
         if items:
             self.proc_combo.current(0)
-            self._set_status(f"{admin_txt} | Игр: {n_games}, вспом.: {n_helpers}, прил.: {n_apps}. "
-                             "Выберите игру ▾ — подключение автоматически.")
+            self._set_status(tr("status_admin_games", admin=admin_txt, games=n_games,
+                                helpers=n_helpers, apps=n_apps))
         else:
-            self._set_status(f"{admin_txt} | Процессов нет. Запустите от админа и нажмите ↻.")
+            self._set_status(tr("status_admin_no_procs", admin=admin_txt))
 
     def _auto_connect_top_game(self):
         # Сначала пробуем настоящую игру (не оверлей/анти-чит).
@@ -437,14 +475,13 @@ class App:
 
     def _check_admin(self):
         if is_admin():
-            self._set_pill("Учебный режим · админ-ДА", C_GREEN)
+            self._set_pill(tr("pill_demo_admin"), C_GREEN)
         else:
-            self._set_pill("Учебный режим · админ-НЕТ", C_AMBER)
+            self._set_pill(tr("pill_demo_no_admin"), C_AMBER)
 
     def _attach_selected(self):
         if not IS_WINDOWS:
-            messagebox.showinfo("Учебный режим",
-                                "На этой ОС нет доступа к чужой памяти — работает только учебный режим.")
+            messagebox.showinfo(tr("msg_demo_title"), tr("msg_demo_body"))
             self._attach_demo()
             return
         sel = self.proc_combo.get()
@@ -456,7 +493,7 @@ class App:
         try:
             pid = int(sel.rsplit("(pid", 1)[1].strip(" )"))
         except Exception:
-            messagebox.showerror("Ошибка", "Не удалось определить pid.")
+            messagebox.showerror(tr("msg_error"), tr("msg_pid_err"))
             return
         if pid <= 0:
             self._attach_demo()
@@ -466,13 +503,11 @@ class App:
             self.proc = open_process(pid)
         except OSError as e:
             _log.warning("OpenProcess не удался для pid=%s: %s", pid, e)
-            messagebox.showerror("Не удалось открыть процесс",
-                                 f"{e}\n\nЧаще всего причина — запуск без прав администратора.\n"
-                                 "Правый клик → «Запуск от имени администратора».")
+            messagebox.showerror(tr("msg_open_err_title"), tr("msg_open_err_body", e=e))
             return
         except Exception as e:
             _log.exception("Непредвиденная ошибка при открытии pid=%s: %s", pid, e)
-            messagebox.showerror("Не удалось открыть процесс", f"{e}\n\nПодробности — в gamecheat.log.")
+            messagebox.showerror(tr("msg_open_err_title"), tr("msg_open_err_log", e=e))
             return
         _log.info("Подключён процесс pid=%s", pid)
         self.scanner = None
@@ -480,8 +515,8 @@ class App:
         self._mode = "exact"
         self._last_value = None
         name = sel.rsplit("(pid", 1)[0].strip().lstrip("🎮▫·🛠 ").strip()
-        self._set_pill(f"Подключён: {name}", C_BLUE)
-        self._set_status(f"Подключён pid={pid} ({name}). Введите значение и нажмите «Поиск».")
+        self._set_pill(tr("pill_connected", name=name), C_BLUE)
+        self._set_status(tr("status_connected", pid=pid, name=name))
 
     def _attach_demo(self):
         self.proc = MockProcess()
@@ -489,8 +524,8 @@ class App:
         self.detector = None
         self._mode = "exact"
         self._last_value = None
-        self._set_pill("Учебный режим", C_GREEN)
-        self._set_status("Учебный режим: демо-игра. Введите значение (напр. 100) и нажмите «Поиск».")
+        self._set_pill(tr("pill_demo"), C_GREEN)
+        self._set_status(tr("status_demo_intro"))
 
     # ------------------------------------------------------------------
     # Фоновый исполнитель + опрос очереди
@@ -498,7 +533,7 @@ class App:
 
     def _run_bg(self, fn):
         if self._busy:
-            messagebox.showinfo("Занято", "Дождитесь завершения текущей операции.")
+            messagebox.showinfo(tr("msg_busy_title"), tr("msg_busy_body"))
             return
         self._busy = True
         self._set_busy_ui(True)
@@ -523,8 +558,10 @@ class App:
             self._set_status(data["msg"])
         if "matches" in data:
             cnt = data["matches"]
-            label = "Кандидатов" if self._mode == "auto" else "Совпадений"
-            self.scan_count_var.set(f"{label}: {cnt}")
+            if self._mode == "auto":
+                self.scan_count_var.set(tr("matches_candidates", n=cnt))
+            else:
+                self.scan_count_var.set(tr("matches_found", n=cnt))
         # Движение полосы прогресса — только в детерминированном режиме
         # (во время отсева работает «бегущий» индикатор, полосу не трогаем).
         if not self._marquee and "regions_total" in data:
@@ -558,42 +595,37 @@ class App:
         if tag == "first_scan":
             self._mode = "exact"
             self._last_value = None
-            self.scan_count_var.set(f"Совпадений: {payload[1]}")
+            self.scan_count_var.set(tr("matches_found", n=payload[1]))
             self._render_results()
-            extra = " (+ снимок памяти для авто-отсева готов)" if self.detector and self.detector.has_baseline else ""
-            self._set_status(f"Поиск: {payload[1]} совпадений по всем типам{extra}. "
-                             "Теперь измените значение в игре и нажмите «Отсев».")
+            extra = tr("extra_baseline") if self.detector and self.detector.has_baseline else ""
+            self._set_status(tr("status_first_done", n=payload[1], extra=extra))
         elif tag == "next_scan":
             self._mode = "exact"
             self._last_value = None
-            self.scan_count_var.set(f"Совпадений: {payload[1]}")
+            self.scan_count_var.set(tr("matches_found", n=payload[1]))
             self._render_results()
-            self._set_status(f"Отсев: осталось {payload[1]} точных совпадений.")
+            self._set_status(tr("status_next_done", n=payload[1]))
         elif tag == "auto_fallback":
             self._mode = "auto"
             n = payload[1]
             kind = payload[2] if len(payload) > 2 else "directed"
-            self.scan_count_var.set(f"Кандидатов: {n}")
+            self.scan_count_var.set(tr("matches_candidates", n=n))
             self._render_results()
             if n > 0 and kind == "directed":
-                self._set_status(f"Отсев: {n} изменившихся адресов, отсортированных по похожести на ваше значение "
-                                 "(наверху — самые вероятные). СОВЕТ Cheat Engine: теперь НЕ меняйте значение в игре "
-                                 "и снова нажмите «Отсев» (поле пустым) — отсеется тикающий шум.")
+                self._set_status(tr("status_auto_directed", n=n))
             elif n > 0 and kind == "unchanged":
-                self._set_status(f"Отсев «не изменилось»: осталось {n} адресов (тикающий шум убран). "
-                                 "Теперь измените значение в игре, впишите его и нажмите «Отсев». "
-                                 "Чередуйте так: изменилось → не изменилось → изменилось …")
+                self._set_status(tr("status_auto_unchanged", n=n))
             else:
-                self._set_status("Изменившихся адресов не найдено — убедитесь, что значение в игре действительно сменилось, и повторите «Отсев».")
+                self._set_status(tr("status_auto_empty"))
         else:
-            self._set_status("Готово.")
+            self._set_status(tr("status_done"))
 
     def _on_error(self, msg):
         self._busy = False
         self._set_busy_ui(False)
         self._marquee_off()
-        messagebox.showerror("Ошибка операции", msg)
-        self._set_status("Ошибка: " + msg[:120])
+        messagebox.showerror(tr("msg_op_error_title"), msg)
+        self._set_status(tr("msg_error") + ": " + msg[:120])
 
     def _set_busy_ui(self, busy: bool):
         for btn in (self.first_btn, self.next_btn, self.write_btn, self.freeze_btn):
@@ -627,23 +659,23 @@ class App:
 
     def _do_first_scan(self):
         if not self.proc:
-            messagebox.showinfo("Нет процесса", "Подключите процесс или учебный режим.")
+            messagebox.showinfo(tr("msg_no_proc_title"), tr("msg_no_proc_body"))
             return
         try:
             val = self._parse_value(self.value_var.get())
         except ValueError:
-            messagebox.showerror("Значение", "Введите число (напр. 100 или 50.5).")
+            messagebox.showerror(tr("msg_value_title"), tr("msg_value_body"))
             return
         self.scanner = Scanner(self.proc, DEFAULT_TYPE_NAMES)
         self.frozen.clear()
         self._clear_tree(self.tree)
-        self.scan_count_var.set("Сканирование…")
+        self.scan_count_var.set(tr("scanning"))
 
         def job(on_progress):
             def cb(p: ScanProgress):
                 on_progress({"regions_total": p.regions_total, "regions_done": p.regions_done,
                              "matches": p.matches,
-                             "msg": f"Поиск… {p.regions_done}/{p.regions_total}, совп {p.matches}"})
+                             "msg": tr("prog_first", done=p.regions_done, total=p.regions_total, matches=p.matches)})
             n = self.scanner.first_scan(val, progress_cb=cb)
             # Снимок всей памяти для авто-отсева (если точный даст 0).
             try:
@@ -651,7 +683,7 @@ class App:
                 self.detector.capture_baseline(
                     progress_cb=lambda p: on_progress({
                         "regions_total": p.regions_total, "regions_done": p.regions_done,
-                        "msg": f"Подготовка авто-отсева… {p.regions_done}/{p.regions_total}"}))
+                        "msg": tr("prog_baseline", done=p.regions_done, total=p.regions_total)}))
             except Exception as e:
                 _log.warning("baseline не собран (авто-отсев будет недоступен): %s", e)
             self._first_value = val
@@ -661,12 +693,12 @@ class App:
     def _do_next_scan(self):
         if self._mode == "exact":
             if not self.scanner or not self.scanner.matches:
-                messagebox.showinfo("Нет данных", "Сначала выполните «Поиск».")
+                messagebox.showinfo(tr("msg_no_data_title"), tr("msg_no_data_body"))
                 return
             try:
                 val = self._parse_value(self.value_var.get())
             except ValueError:
-                messagebox.showerror("Значение", "Введите НОВОЕ значение из игры для отсева.")
+                messagebox.showerror(tr("msg_value_title"), tr("msg_new_value_body"))
                 return
         else:  # auto — поле значения задаёт тип отсева:
             #   пусто  → «значение НЕ изменилось» (отсев тикающего шума, как в Cheat Engine)
@@ -683,11 +715,11 @@ class App:
         # Чёткая индикация: «бегущий» индикатор + статус.
         if self._mode == "auto":
             if val is None:
-                self._marquee_on("Отсев: убираем тикающий шум (адреса, где значение НЕ изменилось)…")
+                self._marquee_on(tr("prog_narrow_noise"))
             else:
-                self._marquee_on("Отсев: направленный поиск (упало/выросло к новому значению)…")
+                self._marquee_on(tr("prog_narrow_directed"))
         else:
-            self._marquee_on("Отсев: точная фильтрация по новому значению…")
+            self._marquee_on(tr("prog_narrow_exact"))
 
         def job(on_progress):
             def cb(p):
@@ -699,9 +731,9 @@ class App:
                 if cnt is None:
                     cnt = getattr(p, "matches", 0)
                 if rt:
-                    msg = f"Отсев: сравнение памяти… {rd}/{rt} регионов, кандидатов {cnt}"
+                    msg = tr("prog_narrow_cmp", done=rd, total=rt, cnt=cnt)
                 else:
-                    msg = f"Отсев… {cnt}"
+                    msg = tr("prog_narrow_short", cnt=cnt)
                 on_progress({"matches": cnt, "msg": msg})
             if self._mode == "auto":
                 if val is None:
@@ -727,7 +759,7 @@ class App:
                 direction = "custom_dec" if (fv is not None and val < fv) else (
                     "custom_inc" if (fv is not None and val > fv) else "custom_chg")
                 _log.info("Отсев: точных 0 → авто-fallback направление=%s (new=%r old=%r)", direction, val, fv)
-                on_progress({"msg": "Отсев: точных нет — авто-поиск изменившихся адресов (сравнение снимка)…"})
+                on_progress({"msg": tr("prog_narrow_fallback")})
                 self.detector.apply_action(direction, progress_cb=cb)
                 self._last_value = val
                 self._rank_candidates(fv, val)
@@ -783,10 +815,10 @@ class App:
         self._mode = "exact"
         self._last_value = None
         self._clear_tree(self.tree)
-        self.scan_count_var.set("Совпадений: 0")
+        self.scan_count_var.set(tr("matches_found", n=0))
         self.sel_addr_var.set("—")
         self._set_edit_enabled(False)
-        self._set_status("Новый поиск: введите значение и нажмите «Поиск».")
+        self._set_status(tr("status_new_search"))
 
     def _render_results(self):
         self._clear_tree(self.tree)
@@ -800,7 +832,7 @@ class App:
                     tags.append("frozen")
                 if i % 2 == 1:
                     tags.append("row2")
-                state = ("🔒 " if c.address in self.frozen else "") + (c.best_label or "?")
+                state = ("🔒 " if c.address in self.frozen else "") + tr(c.best_label or "res_unknown")
                 if c.confidence:
                     state += f" {c.confidence}%"
                 self.tree.insert("", tk.END, iid=str(i), tags=tuple(tags),
@@ -813,7 +845,7 @@ class App:
                 tags.append("frozen")
             if i % 2 == 1:
                 tags.append("row2")
-            state = "🔒 Заморожено" if m.address in self.frozen else ""
+            state = tr("frozen_state") if m.address in self.frozen else ""
             self.tree.insert("", tk.END, iid=str(i), tags=tuple(tags),
                              values=(hex(m.address), m.type_name, _fmt(m.value), state))
 
@@ -866,13 +898,13 @@ class App:
     def _write_selected(self):
         info = self._selected_addr_info()
         if info is None:
-            messagebox.showinfo("Нет выбора", "Выберите адрес в таблице.")
+            messagebox.showinfo(tr("msg_no_sel_title"), tr("msg_no_sel_body"))
             return
         addr_s, typ, _cur = info
         try:
             val = self._parse_value(self.write_var.get())
         except ValueError:
-            messagebox.showerror("Значение", "Введите новое число для записи.")
+            messagebox.showerror(tr("msg_value_title"), tr("msg_write_val_body"))
             return
         dt = BY_NAME.get(typ)
         if not dt:
@@ -887,9 +919,9 @@ class App:
                 pass
             self.tree.set(self._selected_iid, "value", _fmt(val))
             _log.info("Записано %r по адресу %s (%s)", val, addr_s, typ)
-            self._set_status(f"Записано {val} → {addr_s} ({typ}).")
+            self._set_status(tr("status_written", val=val, addr=addr_s, type=typ))
         else:
-            messagebox.showerror("Запись", "Не удалось записать (защита памяти?). Подробности — в логе.")
+            messagebox.showerror(tr("msg_write_err_title"), tr("msg_write_err_body"))
 
     def _update_model_value(self, idx: int, value):
         if self._mode == "auto" and self.detector:
@@ -904,7 +936,7 @@ class App:
     def _freeze_toggle_selected(self):
         info = self._selected_addr_info()
         if info is None:
-            messagebox.showinfo("Нет выбора", "Выберите адрес в таблице.")
+            messagebox.showinfo(tr("msg_no_sel_title"), tr("msg_no_sel_body"))
             return
         addr_s, typ, cur = info
         addr = int(addr_s, 16)
@@ -912,8 +944,8 @@ class App:
         if addr in self.frozen:
             del self.frozen[addr]
             self._refresh_row_state(iid, addr)
-            self.freeze_btn.config(text="Заморозить")
-            self._set_status(f"Разморожено: {addr_s}.")
+            self.freeze_btn.config(text=tr("btn_freeze"))
+            self._set_status(tr("status_unfrozen", addr=addr_s))
         else:
             try:
                 fv = self._parse_value(self.write_var.get()) if self.write_var.get().strip() else cur
@@ -921,10 +953,10 @@ class App:
                 fv = cur
             self.frozen[addr] = {"type_name": typ, "value": fv}
             self._refresh_row_state(iid, addr)
-            self.freeze_btn.config(text="Разморозить")
+            self.freeze_btn.config(text=tr("btn_unfreeze"))
             self._ensure_freeze_thread()
             _log.info("Заморожено %s (%s) = %r", addr_s, typ, fv)
-            self._set_status(f"Заморожено: {addr_s} = {fv}.")
+            self._set_status(tr("status_frozen", addr=addr_s, val=fv))
 
     def _refresh_row_state(self, iid: str, addr: int):
         if iid is None or not self.tree.exists(iid):
@@ -933,13 +965,13 @@ class App:
             try:
                 idx = int(iid)
                 c = self.detector.candidates[idx]
-                state = ("🔒 " if addr in self.frozen else "") + (c.best_label or "?")
+                state = ("🔒 " if addr in self.frozen else "") + tr(c.best_label or "res_unknown")
                 if c.confidence:
                     state += f" {c.confidence}%"
             except Exception:
                 state = ""
         else:
-            state = "🔒 Заморожено" if (addr in self.frozen) else ""
+            state = tr("frozen_state") if (addr in self.frozen) else ""
         self.tree.set(iid, "state", state)
         tags = list(self.tree.item(iid, "tags"))
         if addr in self.frozen:
@@ -963,7 +995,7 @@ class App:
                     del self.frozen[cs[idx].address]
                 del cs[idx]
             self._render_results()
-            self.scan_count_var.set(f"Кандидатов: {len(self.detector.candidates)}")
+            self.scan_count_var.set(tr("matches_candidates", n=len(self.detector.candidates)))
         elif self.scanner:
             ms = self.scanner.matches
             if 0 <= idx < len(ms):
@@ -971,7 +1003,7 @@ class App:
                     del self.frozen[ms[idx].address]
                 del ms[idx]
             self._render_results()
-            self.scan_count_var.set(f"Совпадений: {len(self.scanner.matches)}")
+            self.scan_count_var.set(tr("matches_found", n=len(self.scanner.matches)))
         self.sel_addr_var.set("—")
         self._set_edit_enabled(False)
 

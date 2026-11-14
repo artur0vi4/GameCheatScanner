@@ -15,6 +15,7 @@ main.py
 
 import sys
 import logging
+from i18n import tr
 
 
 def main():
@@ -28,10 +29,10 @@ def main():
         from gui_app import launch
     except Exception as e:
         log.error("Не удалось импортировать gui_app:\n%s", traceback_str(e))
-        print("Не удалось загрузить интерфейс:", e, file=sys.stderr)
-        print("Убедитесь, что установлен Python с Tkinter и numpy:", file=sys.stderr)
-        print("    pip install -r requirements.txt", file=sys.stderr)
-        print(f"Подробности — в логе: см. gamecheat.log", file=sys.stderr)
+        print(tr("main_load_err"), e, file=sys.stderr)
+        print(tr("main_pip_hint"), file=sys.stderr)
+        print(tr("main_pip_cmd"), file=sys.stderr)
+        print(tr("main_log_hint"), file=sys.stderr)
         sys.exit(1)
 
     launch()
