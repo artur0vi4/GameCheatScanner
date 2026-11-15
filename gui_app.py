@@ -38,7 +38,7 @@ _log = logging.getLogger("gamecheat")
 
 MAX_DISPLAY_ROWS = 5000
 
-VERSION = "1.1.3"
+VERSION = "1.1.4"
 GITHUB_URL = "https://github.com/artur0vi4/GameCheatScanner"
 
 # ===========================================================================
@@ -111,6 +111,30 @@ def apply_theme(root: tk.Tk):
     s.configure("TScrollbar", background=C_BG_ENTRY, troughcolor=C_BG_PANEL, bordercolor=C_BORDER, arrowcolor=C_FG)
     s.map("TScrollbar", background=[("active", C_BORDER)])
     s.configure("TSeparator", background=C_BORDER)
+
+
+def _dark_titlebar(win):
+    """Тёмный системный titlebar на Windows 10 1809+ / 11.
+
+    Оконный chrome (полоса с заголовком и кнопками свернуть/развернуть/закрыть)
+    рисует сама Windows, а не Tk. На светлой системной теме это белая полоса над
+    тёмным приложением — отсюда «белая шапка». Включаем DWM immersive dark mode,
+    чтобы titlebar и кнопки стали тёмными и слились с интерфейсом. На не-Windows
+    и старых сборках тихо пропускаем."""
+    if not IS_WINDOWS:
+        return
+    try:
+        import ctypes
+        win.update_idletasks()
+        # winfo_id() возвращает HWND обёртки-потомка; настоящий top-level — его родитель.
+        hwnd = ctypes.windll.user32.GetParent(win.winfo_id()) or win.winfo_id()
+        val = ctypes.c_int(1)
+        size = ctypes.sizeof(val)
+        dsa = ctypes.windll.dwmapi.DwmSetWindowAttribute
+        if dsa(hwnd, 20, ctypes.byref(val), size) != 0:   # 20 = Win10 2004+
+            dsa(hwnd, 19, ctypes.byref(val), size)         # 19 = старая insider-сборка
+    except Exception:
+        pass
 
 
 # ===========================================================================
@@ -197,6 +221,10 @@ class App:
         # Иконки интерфейса (PNG base64, кэш на окно) + иконка окна в заголовке.
         self.icons = icons.load(root)
         root.iconphoto(False, self.icons["logo"])
+        # Тёмный системный titlebar (DWM immersive dark) — иначе на светлой теме
+        # Windows над тёмным приложением висит белая полоса заголовка.
+        _dark_titlebar(root)
+        root.after(200, lambda: _dark_titlebar(root))   # переприменить после отрисовки
         self._build_header()
         self._build_main()
         self._build_status_bar()
@@ -333,6 +361,7 @@ class App:
         win.resizable(False, False)
         win.transient(self.root)
         win.grab_set()
+        _dark_titlebar(win)
 
         head = tk.Frame(win, bg=C_BG_PANEL)
         head.pack(fill=tk.X, padx=18, pady=(18, 8))
